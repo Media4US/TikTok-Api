@@ -5,6 +5,7 @@ import random
 import string
 import time
 from urllib.parse import quote, urlencode
+from datetime import datetime
 
 import requests
 from playwright.sync_api import sync_playwright
@@ -595,6 +596,72 @@ class TikTokApi:
             first = False
 
         return response[:count]
+
+    def user_posts_after_date(self, userID, secUID, after_date, cursor=0, **kwargs) -> list:
+        """Returns an array of dictionaries representing TikToks for a user.
+
+        ##### Parameters
+        * userID: The userID of the user, which TikTok assigns
+
+            You can find this from utilizing other methods or
+            just use by_username to find it.
+        * secUID: The secUID of the user, which TikTok assigns
+
+            You can find this from utilizing other methods or
+            just use by_username to find it.
+        * after: Unix time format of the date after which you want to pull the data
+
+            Note: seems to only support up to ~2,000
+        """
+        (
+            region,
+            language,
+            proxy,
+            maxCount,
+            device_id,
+        ) = self.__process_kwargs__(kwargs)
+        kwargs["custom_device_id"] = device_id
+
+        response = []
+        first = True
+
+        more_data = True
+        while more_data:
+            query = {
+                "count": maxCount,
+                "id": userID,
+                "cursor": cursor,
+                "type": 1,
+                "secUid": secUID,
+                "sourceType": 8,
+                "appId": 1233,
+                "region": region,
+                "priority_region": region,
+                "language": language,
+            }
+            api_url = "{}api/post/item_list/?{}&{}".format(
+                BASE_URL, self.__add_url_params__(), urlencode(query)
+            )
+
+            res = self.get_data(url=api_url, **kwargs)
+
+            if "itemList" in res.keys():
+                for t in res.get("itemList", []):
+                    if datetime.fromtimestamp(t['createTime']).date() >= after_date:
+                        response.append(t)
+                    else:
+                        more_data = False
+                        break
+
+            if not res["hasMore"] and not first:
+                logging.info("TikTok isn't sending more TikToks beyond this point.")
+                return response
+
+            cursor = res["cursor"]
+
+            first = False
+
+        return response
 
     def by_username(self, username, count=30, **kwargs) -> dict:
         """Returns a dictionary listing TikToks given a user's username.
